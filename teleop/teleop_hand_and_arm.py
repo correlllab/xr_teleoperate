@@ -13,6 +13,12 @@ import sys
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
+pt_dir = os.path.join(parent_dir, 'pantilt')
+print(pt_dir)
+assert os.path.exists(pt_dir)
+sys.path.append(pt_dir)
+from PanTiltPublisher import PanTiltControllerPublisher
+
 
 from televuer import TeleVuerWrapper
 from teleop.robot_control.robot_arm import G1_29_ArmController, G1_23_ArmController, H1_2_ArmController, H1_ArmController
@@ -79,8 +85,8 @@ if __name__ == '__main__':
 
     # basic control parameters
     parser.add_argument('--xr-mode', type=str, choices=['hand', 'controller'], default='hand', help='Select XR device tracking source')
-    parser.add_argument('--arm', type=str, choices=['G1_29', 'G1_23', 'H1_2', 'H1'], default='G1_29', help='Select arm controller')
-    parser.add_argument('--ee', type=str, choices=['dex1', 'dex3', 'inspire1', 'brainco'], help='Select end effector controller')
+    parser.add_argument('--arm', type=str, choices=['G1_29', 'G1_23', 'H1_2', 'H1'], default='H1_2', help='Select arm controller')
+    parser.add_argument('--ee', type=str, choices=['dex1', 'dex3', 'inspire1', 'brainco'], default='inspire1', help='Select end effector controller')
     # mode flags
     parser.add_argument('--motion', action = 'store_true', help = 'Enable motion control mode')
     parser.add_argument('--headless', action='store_true', help='Enable headless mode (no display)')
@@ -94,6 +100,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     logger_mp.info(f"args: {args}")
+
 
     try:
         # ipc communication. client usage: see utils/ipc.py
@@ -118,13 +125,13 @@ if __name__ == '__main__':
             }
         else:
             img_config = {
-                'fps': 30,
-                'head_camera_type': 'opencv',
-                'head_camera_image_shape': [480, 1280],  # Head camera resolution
-                'head_camera_id_numbers': [0],
-                'wrist_camera_type': 'opencv',
-                'wrist_camera_image_shape': [480, 640],  # Wrist camera resolution
-                'wrist_camera_id_numbers': [2, 4],
+                'fps':30,                                                          # frame per second
+                'head_camera_type': 'opencv',       
+                'head_camera_image_shape': [480, 1280],                           # Head camera resolution  [height, width]
+                'head_camera_id_numbers': [12],  
+                #'wrist_camera_type': 'opencv',
+                #'wrist_camera_image_shape': [480, 640],  # Wrist camera resolution
+                #'wrist_camera_id_numbers': [2, 4],
             }
 
 
@@ -214,6 +221,9 @@ if __name__ == '__main__':
             hand_ctrl = Brainco_Controller(left_hand_pos_array, right_hand_pos_array, dual_hand_data_lock, dual_hand_state_array, dual_hand_action_array, simulation_mode=args.sim)
         else:
             pass
+
+        PT_pub = PanTiltControllerPublisher(channel_init = False)
+        
         
         # affinity mode (if you dont know what it is, then you probably don't need it)
         if args.affinity:
@@ -292,7 +302,13 @@ if __name__ == '__main__':
                     if args.sim:
                         publish_reset_category(1, reset_pose_publisher)
             # get input data
+            print("getting data")
             tele_data = tv_wrapper.get_motion_state_data()
+            print("data retrived")
+
+            head_mat = tele_data.head_mat
+            PT_pub.publish_pan_tilt_cmd(head_mat)
+
             if (args.ee == "dex3" or args.ee == "inspire1" or args.ee == "brainco") and args.xr_mode == "hand":
                 with left_hand_pos_array.get_lock():
                     left_hand_pos_array[:] = tele_data.left_hand_pos.flatten()
